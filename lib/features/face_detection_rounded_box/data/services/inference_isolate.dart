@@ -112,7 +112,10 @@ Future<void> _inferenceIsolateEntryPoint(_IsolateInitData initData) async {
     // Create interpreters from raw bytes — no asset bundle needed
     spoof1 = Interpreter.fromBuffer(initData.spoof1Bytes, options: options);
     spoof2 = Interpreter.fromBuffer(initData.spoof2Bytes, options: options);
-    recognizer = Interpreter.fromBuffer(initData.recognizerBytes, options: options);
+    recognizer = Interpreter.fromBuffer(
+      initData.recognizerBytes,
+      options: options,
+    );
 
     mainSendPort.send('READY');
   } catch (e) {
@@ -130,12 +133,7 @@ Future<void> _inferenceIsolateEntryPoint(_IsolateInitData initData) async {
     }
 
     if (message is InferenceRequest) {
-      final response = _processJob(
-        message,
-        spoof1,
-        spoof2,
-        recognizer,
-      );
+      final response = _processJob(message, spoof1, spoof2, recognizer);
       mainSendPort.send(response);
     }
   }
@@ -297,7 +295,14 @@ InferenceResponse _processJob(
 // ─────────────────────────────────────────────────────────
 
 List<int> _getNewBox(
-    int srcW, int srcH, int bx, int by, int bw, int bh, double scale) {
+  int srcW,
+  int srcH,
+  int bx,
+  int by,
+  int bw,
+  int bh,
+  double scale,
+) {
   final s = math.min((srcH - 1) / bh, math.min((srcW - 1) / bw, scale));
   final nw = bw * s;
   final nh = bh * s;
@@ -309,10 +314,22 @@ List<int> _getNewBox(
   var x2 = cx + nw / 2.0;
   var y2 = cy + nh / 2.0;
 
-  if (x1 < 0) { x2 -= x1; x1 = 0; }
-  if (y1 < 0) { y2 -= y1; y1 = 0; }
-  if (x2 > srcW) { x1 -= (x2 - srcW); x2 = srcW.toDouble(); }
-  if (y2 > srcH) { y1 -= (y2 - srcH); y2 = srcH.toDouble(); }
+  if (x1 < 0) {
+    x2 -= x1;
+    x1 = 0;
+  }
+  if (y1 < 0) {
+    y2 -= y1;
+    y1 = 0;
+  }
+  if (x2 > srcW) {
+    x1 -= (x2 - srcW);
+    x2 = srcW.toDouble();
+  }
+  if (y2 > srcH) {
+    y1 -= (y2 - srcH);
+    y2 = srcH.toDouble();
+  }
 
   x1 = x1.clamp(0, srcW).toDouble();
   y1 = y1.clamp(0, srcH).toDouble();
@@ -323,9 +340,17 @@ List<int> _getNewBox(
 }
 
 Float32List _preprocessAntiSpoofPatch(
-    img.Image image, List<int> box, int size) {
-  final cropped =
-      img.copyCrop(image, x: box[0], y: box[1], width: box[2], height: box[3]);
+  img.Image image,
+  List<int> box,
+  int size,
+) {
+  final cropped = img.copyCrop(
+    image,
+    x: box[0],
+    y: box[1],
+    width: box[2],
+    height: box[3],
+  );
   final resized = img.copyResize(cropped, width: size, height: size);
 
   final buffer = Float32List(size * size * 3);
@@ -342,7 +367,10 @@ Float32List _preprocessAntiSpoofPatch(
 }
 
 List<double> _runAntiSpoofModel(
-    Interpreter interpreter, Float32List inputBuffer, int size) {
+  Interpreter interpreter,
+  Float32List inputBuffer,
+  int size,
+) {
   final input = inputBuffer.reshape([1, size, size, 3]);
   final output = List.generate(1, (_) => List.filled(3, 0.0));
   interpreter.run(input, output);
@@ -425,7 +453,8 @@ class InferenceIsolateService {
           dev.log('InferenceIsolate: init error: $err', name: 'Isolate');
           if (!completer.isCompleted) {
             completer.completeError(
-                CameraServiceException('Isolate init failed: $err'));
+              CameraServiceException('Isolate init failed: $err'),
+            );
           }
         }
       } else if (message is InferenceResponse) {
@@ -459,13 +488,13 @@ class InferenceIsolateService {
     return _responseController.stream
         .firstWhere((r) => r.requestId == requestId)
         .timeout(
-      const Duration(seconds: 15),
-      onTimeout: () => InferenceResponse(
-        requestId: requestId,
-        success: false,
-        error: 'Inference timeout (15s)',
-      ),
-    );
+          const Duration(seconds: 15),
+          onTimeout: () => InferenceResponse(
+            requestId: requestId,
+            success: false,
+            error: 'Inference timeout (15s)',
+          ),
+        );
   }
 
   /// Shuts down the isolate and cleans up resources.
